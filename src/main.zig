@@ -28,5 +28,17 @@ pub fn main() void {
         std.process.exit(1);
     }
 
+    const listen_ret = c.listen(sockfd, 128);
+    if (listen_ret == -1) {
+        std.log.err("failed to listen socket. errno: {}\n", .{C.getErrno(listen_ret)});
+        std.process.exit(1);
+    }
+
+    const accepted_fd = c.accept(sockfd, null, null);
+    if (accepted_fd == -1) {
+        std.log.err("failed to accept socket. errno: {}\n", .{C.getErrno(accepted_fd)});
+        std.process.exit(1);
+    }
+
     std.log.info("finish\n", .{});
 }
