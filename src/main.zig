@@ -1,7 +1,32 @@
+const std = @import("std");
+const mem = std.mem;
+const C = std.c;
 const c = @cImport({
-    @cInclude("stdio.h");
+    @cInclude("sys/socket.h");
+    @cInclude("netinet/in.h");
+    @cInclude("netinet/tcp.h");
 });
 
 pub fn main() void {
-    _ = c.printf("hello\n");
+    std.log.info("start\n", .{});
+
+    const sockfd = c.socket(C.AF.INET, C.SOCK.STREAM, 0);
+    if (sockfd == -1) {
+        std.log.err("failed to create socket. errno: {}\n", .{C.getErrno(sockfd)});
+        std.process.exit(1);
+    }
+
+    const sa = C.sockaddr.in{
+        .family = C.AF.INET,
+        .port = mem.nativeToBig(u16, 8888),
+        .addr = 0x00000000,
+        .zero = [8]u8{ 0, 0, 0, 0, 0, 0, 0, 0 },
+    };
+    const bind_ret = c.bind(sockfd, @ptrToInt(&sa), @sizeOf(@TypeOf(sa)));
+    if (bind_ret == -1) {
+        std.log.err("failed to bind socket. errno: {}\n", .{C.getErrno(bind_ret)});
+        std.process.exit(1);
+    }
+
+    std.log.info("finish\n", .{});
 }
