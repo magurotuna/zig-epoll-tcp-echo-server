@@ -123,7 +123,7 @@ pub fn main() void {
                 if (ctl_ret == -1) {
                     std.log.err("failed to delete a file descritor from the interest list. errno: {}\n", .{C.getErrno(ctl_ret)});
                 }
-                _  = C.close(events[i].data.fd);
+                _ = C.close(events[i].data.fd);
             }
         }
     }
