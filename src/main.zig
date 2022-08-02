@@ -1,11 +1,12 @@
 const std = @import("std");
+const linux = std.os.linux;
 const mem = std.mem;
 const C = std.c;
 
 pub fn main() void {
     std.log.info("start\n", .{});
 
-    const sockfd = C.socket(C.AF.INET, C.SOCK.STREAM, 0);
+    const sockfd = C.socket(C.AF.INET, C.SOCK.STREAM | C.SOCK.NONBLOCK | C.SOCK.CLOEXEC, 0);
     if (sockfd == -1) {
         std.log.err("failed to create socket. errno: {}\n", .{C.getErrno(sockfd)});
         std.process.exit(1);
@@ -30,37 +31,100 @@ pub fn main() void {
         std.process.exit(1);
     }
 
-    const accepted_fd = C.accept(sockfd, null, null);
-    if (accepted_fd == -1) {
-        std.log.err("failed to accept socket. errno: {}\n", .{C.getErrno(accepted_fd)});
-        std.process.exit(1);
+    // create epoll instance
+    const epfd = epoll: {
+        const epfd = C.epoll_create1(linux.EPOLL.CLOEXEC);
+        if (epfd == -1) {
+            std.log.err("failed to create epoll instance. errno: {}\n", .{C.getErrno(-1)});
+            std.process.exit(1);
+        }
+        break :epoll @intCast(i32, epfd);
+    };
+    defer _ = C.close(epfd);
+
+    // add sockfd to the interest list
+    {
+        var epoll_ev = C.epoll_event{
+            .events = linux.EPOLL.IN | linux.EPOLL.OUT | linux.EPOLL.ET,
+            .data = .{
+                .fd = sockfd,
+            },
+        };
+        const ctl_ret = C.epoll_ctl(epfd, linux.EPOLL.CTL_ADD, sockfd, &epoll_ev);
+        if (ctl_ret == -1) {
+            std.log.err("failed to add sockfd to the interest list. errno: {}\n", .{C.getErrno(ctl_ret)});
+            std.process.exit(1);
+        }
     }
-    defer _ = C.close(accepted_fd);
 
-    std.log.info("connection established!\n", .{});
+    const max_events = 64;
+    var events: [max_events]linux.epoll_event = undefined;
 
-    const buf_size = 4096;
-    var buf: [buf_size]u8 = undefined;
     while (true) {
-        const nread = C.read(accepted_fd, &buf, buf_size);
-        if (nread == -1) {
-            std.log.err("failed to read data. errno: {}\n", .{C.getErrno(nread)});
+        std.log.info("======== beginning of the loop ========", .{});
+
+        const nfds = C.epoll_wait(epfd, &events, max_events, -1);
+        if (nfds == -1) {
+            std.log.err("something went wrong when waiting for events. errno: {}\n", .{C.getErrno(nfds)});
             std.process.exit(1);
         }
-        if (nread == 0) break;
 
-        const bytes = @intCast(usize, nread);
-        const received = buf[0..bytes];
-        std.log.info("received: {s}\n", .{received});
+        var i: usize = 0;
+        while (i < nfds) : (i += 1) {
+            if (events[i].data.fd == sockfd) {
+                // new connection is opening
+                const conn_fd = C.accept4(sockfd, null, null, C.SOCK.NONBLOCK | C.SOCK.CLOEXEC);
+                if (conn_fd == -1) {
+                    std.log.err("failed to accept socket. errno: {}\n", .{C.getErrno(conn_fd)});
+                    continue;
+                }
 
-        const nwrite = C.write(accepted_fd, received.ptr, bytes);
-        if (nwrite == -1) {
-            std.log.err("failed to write data. errno: {}\n", .{C.getErrno(nwrite)});
-            std.process.exit(1);
+                std.log.info("new connetion established\n", .{});
+
+                {
+                    var epoll_ev = C.epoll_event{
+                        .events = linux.EPOLL.IN | linux.EPOLL.ET | linux.EPOLL.RDHUP | linux.EPOLL.HUP,
+                        .data = .{
+                            .fd = conn_fd,
+                        },
+                    };
+                    const ctl_ret = C.epoll_ctl(epfd, linux.EPOLL.CTL_ADD, conn_fd, &epoll_ev);
+                    if (ctl_ret == -1) {
+                        std.log.err("failed to add new connection to the interest list. errno: {}\n", .{C.getErrno(ctl_ret)});
+                        continue;
+                    }
+                }
+            } else if (events[i].events & linux.EPOLL.IN != 0) {
+                // data is arriving on the existing connection
+                while (true) {
+                    const buf_size = 4096;
+                    var buf: [buf_size]u8 = undefined;
+
+                    const nread = C.read(events[i].data.fd, &buf, buf_size);
+                    if (nread <= 0) break;
+
+                    const bytes = @intCast(usize, nread);
+                    const received = buf[0..bytes];
+
+                    const nwrite = C.write(events[i].data.fd, received.ptr, bytes);
+                    if (nwrite == -1) {
+                        std.log.err("failed to write data. errno: {}\n", .{C.getErrno(nwrite)});
+                        std.process.exit(1);
+                    }
+                }
+            } else {
+                std.log.warn("unexpected event occurred\n", .{});
+            }
+
+            // Check if the conneciton is closing
+            if (events[i].events & (linux.EPOLL.RDHUP | linux.EPOLL.HUP) != 0) {
+                std.log.info("connection closed\n", .{});
+                const ctl_ret = C.epoll_ctl(epfd, linux.EPOLL.CTL_DEL, events[i].data.fd, null);
+                if (ctl_ret == -1) {
+                    std.log.err("failed to delete a file descritor from the interest list. errno: {}\n", .{C.getErrno(ctl_ret)});
+                }
+                _  = C.close(events[i].data.fd);
+            }
         }
     }
-
-    std.log.info("connection interrupted!\n", .{});
-
-    std.log.info("finish\n", .{});
 }
