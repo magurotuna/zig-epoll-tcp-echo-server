@@ -101,7 +101,7 @@ pub fn main() void {
                     var buf: [buf_size]u8 = undefined;
 
                     const nread = C.read(events[i].data.fd, &buf, buf_size);
-                    if (nread <= 0) break;
+                    if (nread <= 0) break; // including WOULDBLOCK
 
                     const bytes = @intCast(usize, nread);
                     const received = buf[0..bytes];
