@@ -15,6 +15,15 @@ pub fn main() void {
 
     {
         const optval = @intCast(c_int, @boolToInt(true));
+        const setsockopt_ret = C.setsockopt(sockfd, C.SOL.SOCKET, C.SO.REUSEADDR, mem.asBytes(&optval), @sizeOf(@TypeOf(optval)));
+        if (setsockopt_ret == -1) {
+            std.log.err("failed to set SO_REUSEADDR. errno: {}\n", .{C.getErrno(setsockopt_ret)});
+            std.process.exit(1);
+        }
+    }
+
+    {
+        const optval = @intCast(c_int, @boolToInt(true));
         const setsockopt_ret = C.setsockopt(sockfd, C.SOL.SOCKET, C.SO.REUSEPORT, mem.asBytes(&optval), @sizeOf(@TypeOf(optval)));
         if (setsockopt_ret == -1) {
             std.log.err("failed to set SO_REUSEPORT. errno: {}\n", .{C.getErrno(setsockopt_ret)});
