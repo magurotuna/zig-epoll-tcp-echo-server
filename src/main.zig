@@ -2,9 +2,42 @@ const std = @import("std");
 const linux = std.os.linux;
 const mem = std.mem;
 const C = std.c;
+const Thread = std.Thread;
 
 pub fn main() void {
-    std.log.info("start\n", .{});
+    const cpu = Thread.getCpuCount() catch |err| {
+        std.log.err("failed to get cpu count because of {}\n", .{err});
+        std.process.exit(1);
+    };
+
+    std.log.info("there are {} cpus available\n", .{cpu});
+
+    const allocator = std.heap.page_allocator;
+
+    var threads = std.ArrayList(Thread).initCapacity(allocator, cpu) catch |err| {
+        std.log.err("failed to create ArrayList because of {}\n", .{err});
+        std.process.exit(1);
+    };
+
+    defer threads.deinit();
+
+    var i: usize = 0;
+    while (i < cpu) : (i += 1) {
+        const t = Thread.spawn(.{}, server, .{i}) catch |err| {
+            std.log.err("failed to spawn new thread because of {}\n", .{err});
+            std.process.exit(1);
+        };
+
+        threads.append(t) catch unreachable;
+    }
+
+    for (threads.items) |t| {
+        t.join();
+    }
+}
+
+fn server(thread_id: usize) void {
+    std.log.info("thread {} started\n", .{thread_id});
 
     const sockfd = C.socket(C.AF.INET, C.SOCK.STREAM | C.SOCK.NONBLOCK | C.SOCK.CLOEXEC, 0);
     if (sockfd == -1) {
@@ -79,13 +112,15 @@ pub fn main() void {
     var events: [max_events]linux.epoll_event = undefined;
 
     while (true) {
-        std.log.info("======== beginning of the loop ========", .{});
+        std.log.info("======== beginning of the loop in thread {} ========", .{thread_id});
 
         const nfds = C.epoll_wait(epfd, &events, max_events, -1);
         if (nfds == -1) {
             std.log.err("something went wrong when waiting for events. errno: {}\n", .{C.getErrno(nfds)});
             std.process.exit(1);
         }
+
+        std.log.info("thread {} is awakened\n", .{thread_id});
 
         var i: usize = 0;
         while (i < nfds) : (i += 1) {
