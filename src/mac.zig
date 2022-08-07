@@ -63,7 +63,7 @@ pub fn serverMac(thread_id: usize) !void {
                 var adr_len: os.socklen_t = @sizeOf(net.Address);
                 const connfd = try os.accept(sockfd, &accepted_addr.any, &adr_len, 0);
 
-                std.log.info("thread {} has established the connection with {}\n", .{thread_id, accepted_addr});
+                std.log.info("thread {} has established the connection with {}\n", .{ thread_id, accepted_addr });
 
                 // Darwin doesn't support `accept4(2)` call. We have to set `CLOEXEC`. For more detail, see:
                 // https://github.com/tokio-rs/mio/blob/3340f6d39944c66b186e06d6c5d67f32596d15e4/src/sys/unix/tcp.rs#L84-L86
