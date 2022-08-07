@@ -28,6 +28,8 @@ pub fn serverMac(thread_id: usize) !void {
     try os.listen(sockfd, 128);
 
     const kqfd = try os.kqueue();
+    defer os.close(kqfd);
+
     _ = try os.kevent(kqfd, &[_]os.Kevent{.{
         .ident = @intCast(usize, sockfd),
         .filter = system.EVFILT_READ,
