@@ -58,7 +58,9 @@ pub fn serverMac(thread_id: usize) !void {
                 // new connection is opening
                 // TODO: get client data and output to log
                 const connfd = try os.accept(sockfd, null, null, 0);
-                // TODO: add link to mio as to why this is necessary
+
+                // Darwin doesn't support `accept4(2)` call. We have to set `CLOEXEC`. For more detail, see:
+                // https://github.com/tokio-rs/mio/blob/3340f6d39944c66b186e06d6c5d67f32596d15e4/src/sys/unix/tcp.rs#L84-L86
                 try setCloExec(connfd);
 
                 _ = try os.kevent(kqfd, &[_]os.Kevent{.{
