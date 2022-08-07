@@ -5,21 +5,34 @@ const serverLinux = @import("./linux.zig").serverLinux;
 const serverMac = @import("./mac.zig").serverMac;
 
 pub fn main() void {
-    const server_impl = comptime switch (builtin.os.tag) {
-        .linux => serverLinux,
-        .macos => serverMac,
+    comptime switch (builtin.os.tag) {
+        .linux, .macos => {},
         else => {
             std.log.warn("This operating system is not supported\n", .{});
             std.process.exit(1);
         },
     };
 
-    const cpu = Thread.getCpuCount() catch |err| {
-        std.log.err("failed to get cpu count because of {}\n", .{err});
-        std.process.exit(1);
+    const server_impl = comptime switch (builtin.os.tag) {
+        .linux => serverLinux,
+        .macos => serverMac,
+        else => unreachable,
     };
 
-    std.log.info("there are {} cpus available\n", .{cpu});
+    // On Linux, when enabling `SO_REUSEPORT` and having multiple sockets to bind to the same port, the kernel will
+    // distribute the incoming connections to these sockets automatically.
+    // On the other hand, on macOS (and other OSes), automatic distribution won't happen; thus we use just one thread.
+    // For more detail, see https://stackoverflow.com/questions/14388706/how-do-so-reuseaddr-and-so-reuseport-differ
+    const cpu = switch (builtin.os.tag) {
+        .linux => Thread.getCpuCount() catch |err| {
+            std.log.err("failed to get cpu count because of {}\n", .{err});
+            std.process.exit(1);
+        },
+        .macos => 1,
+        else => unreachable,
+    };
+
+    std.log.info("{} thread(s) will be spawned\n", .{cpu});
 
     const allocator = std.heap.page_allocator;
 
