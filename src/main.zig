@@ -7,8 +7,8 @@ const builtin = @import("builtin");
 
 pub fn main() void {
     const server_impl = switch (builtin.os.tag) {
-        .linux => server_linux,
-        .macos => server_mac,
+        .linux => serverLinux,
+        .macos => serverMac,
         else => {
             std.log.warn("This operating system is not supported\n", .{});
             std.process.exit(1);
@@ -46,7 +46,7 @@ pub fn main() void {
     }
 }
 
-fn server_linux(thread_id: usize) void {
+fn serverLinux(thread_id: usize) void {
     std.log.info("thread {} started\n", .{thread_id});
 
     const sockfd = C.socket(C.AF.INET, C.SOCK.STREAM | C.SOCK.NONBLOCK | C.SOCK.CLOEXEC, 0);
@@ -192,6 +192,6 @@ fn server_linux(thread_id: usize) void {
     }
 }
 
-fn server_mac(thread_id: usize) void {
+fn serverMac(thread_id: usize) void {
     std.log.warn("not yet implemented {}\n", .{thread_id});
 }
