@@ -44,4 +44,3 @@ pub fn main() void {
         t.join();
     }
 }
-
