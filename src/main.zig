@@ -6,45 +6,47 @@ const Thread = std.Thread;
 const builtin = @import("builtin");
 
 pub fn main() void {
-    switch (builtin.os.tag) {
-        .linux => {
-            const cpu = Thread.getCpuCount() catch |err| {
-                std.log.err("failed to get cpu count because of {}\n", .{err});
-                std.process.exit(1);
-            };
-
-            std.log.info("there are {} cpus available\n", .{cpu});
-
-            const allocator = std.heap.page_allocator;
-
-            var threads = std.ArrayList(Thread).initCapacity(allocator, cpu) catch |err| {
-                std.log.err("failed to create ArrayList because of {}\n", .{err});
-                std.process.exit(1);
-            };
-
-            defer threads.deinit();
-
-            var i: usize = 0;
-            while (i < cpu) : (i += 1) {
-                const t = Thread.spawn(.{}, server, .{i}) catch |err| {
-                    std.log.err("failed to spawn new thread because of {}\n", .{err});
-                    std.process.exit(1);
-                };
-
-                threads.append(t) catch unreachable;
-            }
-
-            for (threads.items) |t| {
-                t.join();
-            }
-        },
+    const server_impl = switch (builtin.os.tag) {
+        .linux => server_linux,
+        .macos => server_mac,
         else => {
-            std.log.warn("This operating system is not supported yet", .{});
+            std.log.warn("This operating system is not supported\n", .{});
+            std.process.exit(1);
         },
+    };
+
+    const cpu = Thread.getCpuCount() catch |err| {
+        std.log.err("failed to get cpu count because of {}\n", .{err});
+        std.process.exit(1);
+    };
+
+    std.log.info("there are {} cpus available\n", .{cpu});
+
+    const allocator = std.heap.page_allocator;
+
+    var threads = std.ArrayList(Thread).initCapacity(allocator, cpu) catch |err| {
+        std.log.err("failed to create ArrayList because of {}\n", .{err});
+        std.process.exit(1);
+    };
+
+    defer threads.deinit();
+
+    var i: usize = 0;
+    while (i < cpu) : (i += 1) {
+        const t = Thread.spawn(.{}, server_impl, .{i}) catch |err| {
+            std.log.err("failed to spawn new thread because of {}\n", .{err});
+            std.process.exit(1);
+        };
+
+        threads.append(t) catch unreachable;
+    }
+
+    for (threads.items) |t| {
+        t.join();
     }
 }
 
-fn server(thread_id: usize) void {
+fn server_linux(thread_id: usize) void {
     std.log.info("thread {} started\n", .{thread_id});
 
     const sockfd = C.socket(C.AF.INET, C.SOCK.STREAM | C.SOCK.NONBLOCK | C.SOCK.CLOEXEC, 0);
@@ -188,4 +190,8 @@ fn server(thread_id: usize) void {
             }
         }
     }
+}
+
+fn server_mac(thread_id: usize) void {
+    std.log.warn("not yet implemented {}\n", .{thread_id});
 }
