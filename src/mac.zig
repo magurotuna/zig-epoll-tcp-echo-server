@@ -43,7 +43,7 @@ pub fn serverMac(thread_id: usize) !void {
     const max_events = 64;
     var events: [max_events]os.Kevent = undefined;
 
-    evloop: while (true) {
+    while (true) {
         std.log.info("======== beginning of the loop in thread {} ========", .{thread_id});
 
         const n_events = try os.kevent(kqfd, &.{}, &events, null);
@@ -51,7 +51,7 @@ pub fn serverMac(thread_id: usize) !void {
         std.log.info("thread {} is awakened\n", .{thread_id});
 
         var i: usize = 0;
-        while (i < n_events) : (i += 1) {
+        ready_events: while (i < n_events) : (i += 1) {
             const event_fd = events[i].ident;
 
             if (events[i].flags & system.EV_EOF != 0) {
@@ -84,7 +84,7 @@ pub fn serverMac(thread_id: usize) !void {
                     var buf: [buf_size]u8 = undefined;
 
                     const nread = os.read(@intCast(os.socket_t, event_fd), &buf) catch |err| switch (err) {
-                        os.ReadError.WouldBlock => continue :evloop,
+                        os.ReadError.WouldBlock => continue :ready_events,
                         else => return err,
                     };
 
