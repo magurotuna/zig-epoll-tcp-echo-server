@@ -3,36 +3,44 @@ const linux = std.os.linux;
 const mem = std.mem;
 const C = std.c;
 const Thread = std.Thread;
+const builtin = @import("builtin");
 
 pub fn main() void {
-    const cpu = Thread.getCpuCount() catch |err| {
-        std.log.err("failed to get cpu count because of {}\n", .{err});
-        std.process.exit(1);
-    };
+    switch (builtin.os.tag) {
+        .linux => {
+            const cpu = Thread.getCpuCount() catch |err| {
+                std.log.err("failed to get cpu count because of {}\n", .{err});
+                std.process.exit(1);
+            };
 
-    std.log.info("there are {} cpus available\n", .{cpu});
+            std.log.info("there are {} cpus available\n", .{cpu});
 
-    const allocator = std.heap.page_allocator;
+            const allocator = std.heap.page_allocator;
 
-    var threads = std.ArrayList(Thread).initCapacity(allocator, cpu) catch |err| {
-        std.log.err("failed to create ArrayList because of {}\n", .{err});
-        std.process.exit(1);
-    };
+            var threads = std.ArrayList(Thread).initCapacity(allocator, cpu) catch |err| {
+                std.log.err("failed to create ArrayList because of {}\n", .{err});
+                std.process.exit(1);
+            };
 
-    defer threads.deinit();
+            defer threads.deinit();
 
-    var i: usize = 0;
-    while (i < cpu) : (i += 1) {
-        const t = Thread.spawn(.{}, server, .{i}) catch |err| {
-            std.log.err("failed to spawn new thread because of {}\n", .{err});
-            std.process.exit(1);
-        };
+            var i: usize = 0;
+            while (i < cpu) : (i += 1) {
+                const t = Thread.spawn(.{}, server, .{i}) catch |err| {
+                    std.log.err("failed to spawn new thread because of {}\n", .{err});
+                    std.process.exit(1);
+                };
 
-        threads.append(t) catch unreachable;
-    }
+                threads.append(t) catch unreachable;
+            }
 
-    for (threads.items) |t| {
-        t.join();
+            for (threads.items) |t| {
+                t.join();
+            }
+        },
+        else => {
+            std.log.warn("This operating system is not supported yet", .{});
+        },
     }
 }
 
