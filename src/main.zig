@@ -5,7 +5,7 @@ const serverLinux = @import("./linux.zig").serverLinux;
 const serverMac = @import("./mac.zig").serverMac;
 
 pub fn main() void {
-    const server_impl = switch (builtin.os.tag) {
+    const server_impl = comptime switch (builtin.os.tag) {
         .linux => serverLinux,
         .macos => serverMac,
         else => {
