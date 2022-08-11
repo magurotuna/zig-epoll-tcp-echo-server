@@ -8,8 +8,7 @@ pub fn main() void {
     comptime switch (builtin.os.tag) {
         .linux, .macos => {},
         else => {
-            std.log.warn("This operating system is not supported\n", .{});
-            std.process.exit(1);
+            @compileError("This operating system is not supported");
         },
     };
 
